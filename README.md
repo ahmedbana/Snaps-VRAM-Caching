@@ -85,6 +85,30 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **Verify caching**: See how many models are cached
 - **Debug storage**: Confirm models are actually stored in GPU VRAM
 
+### 5. 📥 SNAPS Cached Model Loader (CachedModelLoaderNode)
+
+**Node for loading cached models by name without original model file**
+
+**Inputs:**
+- `model_name` (STRING): Name of the cached model to load
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion")
+
+**Outputs:**
+- `model`: The cached model data
+- `cache_status`: Status message
+- `model_type`: The actual model type from cache
+
+**Usage:**
+- **Load by name only**: No need for original model file
+- **Instant retrieval**: Gets model directly from VRAM cache
+- **Workflow optimization**: Perfect for reusing cached models in different parts of workflow
+- **Error handling**: Returns error if model name not found in cache
+
+**Example Workflow:**
+1. Use **🤖 SNAPS Model Loader** to cache a model with name "my_checkpoint"
+2. Use **📥 SNAPS Cached Model Loader** with model_name "my_checkpoint" to retrieve it instantly
+3. No need to provide the original model file again
+
 ## How It Works
 
 1. **Cache Key Generation**: Each model gets a unique cache key based on file path, modification time, and file size

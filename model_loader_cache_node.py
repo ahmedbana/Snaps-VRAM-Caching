@@ -155,3 +155,45 @@ class ModelLoaderCacheNode:
         except Exception as e:
             logger.error(f"Error caching {model_type} model {model_name}: {str(e)}")
             return (None, f"ERROR: {str(e)}", model_type) 
+
+class CachedModelLoaderNode:
+    """ComfyUI node for loading cached models by name without original model file"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model_name": ("STRING", {"default": "", "multiline": False}),
+                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
+            }
+        }
+    
+    RETURN_TYPES = ("MODEL", "STRING", "STRING")
+    RETURN_NAMES = ("model", "cache_status", "model_type")
+    FUNCTION = "load_cached_model"
+    CATEGORY = "VRAM Cache"
+    
+    def load_cached_model(self, model_name: str, model_type: str = "auto"):
+        """Load cached model by name without original file"""
+        cache = VRAMCache()
+        
+        if not model_name or not model_name.strip():
+            logger.error("Model name is required")
+            return (None, "ERROR: Model name is required", model_type)
+        
+        logger.info(f"Attempting to load cached model by name: {model_name}")
+        
+        # Check if model is cached by name
+        if model_name in cache._cache:
+            logger.info(f"Found cached model in VRAM: {model_name}")
+            cached_model = cache._cache[model_name]
+            
+            # Get cache info
+            cache_info = cache._cache_info.get(model_name, {})
+            actual_model_type = cache_info.get("type", model_type)
+            
+            logger.info(f"Successfully loaded cached {actual_model_type} model: {model_name}")
+            return (cached_model, "LOADED_FROM_CACHE", actual_model_type)
+        else:
+            logger.error(f"Model '{model_name}' not found in VRAM cache")
+            return (None, f"ERROR: Model '{model_name}' not found in cache", model_type) 
