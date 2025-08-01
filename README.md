@@ -38,16 +38,18 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 
 **Specialized node for caching model data directly in VRAM by name**
 
-**Inputs:**
+**Required Inputs:**
+- `model_name` (STRING): Name/identifier for the model (required for caching)
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion")
+- `force_reload` (BOOLEAN): Force reload even if already cached (default: False)
+
+**Optional Inputs (one is sufficient):**
 - `model` (MODEL): The model data to cache
 - `clip` (CLIP): The CLIP model data to cache
 - `vae` (VAE): The VAE model data to cache
 - `checkpoint` (CHECKPOINT): The checkpoint model data to cache
 - `lora` (LORA): The LoRA model data to cache
 - `controlnet` (CONTROL_NET): The ControlNet model data to cache
-- `model_name` (STRING): Name/identifier for the model (required for caching)
-- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion")
-- `force_reload` (BOOLEAN): Force reload even if already cached (default: False)
 
 **Outputs:**
 - `model` (MODEL): The cached model data (if model input was used)
@@ -60,7 +62,8 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - `model_type`: The detected/selected model type
 
 **Usage:**
-- **Multi-model support**: Accepts all ComfyUI model types (MODEL, CLIP, VAE, CHECKPOINT, LORA, CONTROL_NET)
+- **Single input sufficient**: Connect any one model type (MODEL, CLIP, VAE, CHECKPOINT, LORA, CONTROL_NET)
+- **Multi-model support**: Accepts all ComfyUI model types
 - **Automatic type detection**: Automatically detects which model type was provided
 - **Caches models by name** - use the same `model_name` to retrieve cached models
 - **Caches the model data directly in GPU VRAM**
@@ -68,9 +71,9 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **Useful for caching any type of model that is already loaded in your workflow**
 
 **Example Usage:**
-- Connect a CLIP model → cache as "my_clip"
-- Connect a VAE model → cache as "my_vae"
-- Connect a LoRA model → cache as "my_lora"
+- Connect just a CLIP model → cache as "my_clip"
+- Connect just a VAE model → cache as "my_vae"
+- Connect just a LoRA model → cache as "my_lora"
 - Later use Cached Model Loader to retrieve any of these by name
 
 ### 3. 📋 SNAPS Cache Control (VRAMCacheControlNode)
@@ -102,13 +105,15 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **Verify caching**: See how many models are cached
 - **Debug storage**: Confirm models are actually stored in GPU VRAM
 
-### 5. 📥 SNAPS Cached Model Loader (CachedModelLoaderNode)
+### 5. 🤖 SNAPS Cached Model Loader (CachedModelLoaderNode)
 
 **Node for loading cached models by name without original model file**
 
-**Inputs:**
+**Required Inputs:**
 - `model_name` (STRING): Name of the cached model to load
-- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion")
+
+**Optional Inputs:**
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion") - auto-detected if not provided
 
 **Outputs:**
 - `model` (MODEL): The cached model data (if cached as model type)
@@ -124,12 +129,13 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **Load by name only**: No need for original model file
 - **Instant retrieval**: Gets model directly from VRAM cache
 - **Multi-model support**: Returns the appropriate model type based on what was cached
+- **Auto-detection**: Model type is automatically detected from cache if not specified
 - **Workflow optimization**: Perfect for reusing cached models in different parts of workflow
 - **Error handling**: Returns error if model name not found in cache
 
 **Example Workflow:**
 1. Use **🤖 SNAPS Model Loader** to cache a CLIP model with name "my_clip"
-2. Use **📥 SNAPS Cached Model Loader** with model_name "my_clip" to retrieve it instantly
+2. Use **🤖 SNAPS Cached Model Loader** with model_name "my_clip" to retrieve it instantly
 3. The CLIP output will contain the cached model, other outputs will be None
 4. No need to provide the original model file again
 

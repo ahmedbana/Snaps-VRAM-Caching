@@ -13,15 +13,17 @@ class ModelLoaderCacheNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "model_name": ("STRING", {"default": "model", "multiline": False}),
+                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
+                "force_reload": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
                 "model": ("MODEL",),
                 "clip": ("CLIP",),
                 "vae": ("VAE",),
                 "checkpoint": ("CHECKPOINT",),
                 "lora": ("LORA",),
                 "controlnet": ("CONTROL_NET",),
-                "model_name": ("STRING", {"default": "model", "multiline": False}),
-                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
-                "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
     
@@ -221,6 +223,8 @@ class CachedModelLoaderNode:
         return {
             "required": {
                 "model_name": ("STRING", {"default": "", "multiline": False}),
+            },
+            "optional": {
                 "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
             }
         }
