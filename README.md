@@ -50,6 +50,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - `checkpoint` (CHECKPOINT): The checkpoint model data to cache
 - `lora` (LORA): The LoRA model data to cache
 - `controlnet` (CONTROL_NET): The ControlNet model data to cache
+- `pulid_flux` (PULIDFLUX): The PuLID Flux model data to cache
 
 **Outputs:**
 - `model` (MODEL): The cached model data (if model input was used)
@@ -58,6 +59,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - `checkpoint` (CHECKPOINT): The cached checkpoint data (if checkpoint input was used)
 - `lora` (LORA): The cached LoRA data (if lora input was used)
 - `controlnet` (CONTROL_NET): The cached ControlNet data (if controlnet input was used)
+- `pulid_flux` (PULIDFLUX): The cached PuLID Flux data (if pulid_flux input was used)
 - `cache_status`: Status message
 - `model_type`: The detected/selected model type
 
@@ -122,6 +124,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - `checkpoint` (CHECKPOINT): The cached checkpoint data (if cached as checkpoint type)
 - `lora` (LORA): The cached LoRA data (if cached as lora type)
 - `controlnet` (CONTROL_NET): The cached ControlNet data (if cached as controlnet type)
+- `pulid_flux` (PULIDFLUX): The cached PuLID Flux data (if cached as pulid_flux type)
 - `cache_status`: Status message
 - `model_type`: The actual model type from cache
 

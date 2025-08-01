@@ -24,11 +24,12 @@ class ModelLoaderCacheNode:
                 "checkpoint": ("CHECKPOINT",),
                 "lora": ("LORA",),
                 "controlnet": ("CONTROL_NET",),
+                "pulid_flux": ("PULIDFLUX",),  # Updated to match ComfyUI output type
             }
         }
     
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "STRING", "STRING")
-    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "cache_status", "model_type")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "PULIDFLUX", "STRING", "STRING")
+    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "pulid_flux", "cache_status", "model_type")
     FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
@@ -146,9 +147,12 @@ class ModelLoaderCacheNode:
         elif controlnet is not None:
             model_data = controlnet
             actual_model_type = "controlnet"
+        elif pulid_flux is not None:
+            model_data = pulid_flux
+            actual_model_type = "Load Pulid Flux Model"
         else:
             logger.error("No model input provided")
-            return (None, None, None, None, None, None, "ERROR: No model input provided", model_type)
+            return (None, None, None, None, None, None, None, "ERROR: No model input provided", model_type)
         
         # Handle special model types
         if model_type == "Load Pulid Flux Model":
@@ -156,7 +160,7 @@ class ModelLoaderCacheNode:
         
         if model_data is None:
             logger.error(f"Model data is None for model: {model_name}")
-            return (None, None, None, None, None, None, "ERROR: Model data is None", model_type)
+            return (None, None, None, None, None, None, None, "ERROR: Model data is None", model_type)
         
         # Debug logging to identify model type
         logger.info(f"Processing {actual_model_type} model: {model_name}")
@@ -170,17 +174,19 @@ class ModelLoaderCacheNode:
             
             # Return the cached model in the appropriate output
             if actual_model_type == "model":
-                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (cached_model, None, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "clip":
-                return (None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "vae":
-                return (None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "checkpoint":
-                return (None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "lora":
-                return (None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "controlnet":
-                return (None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "Load Pulid Flux Model":
+                return (None, None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
         
         # Cache the model data directly in VRAM by name
         try:
@@ -203,21 +209,23 @@ class ModelLoaderCacheNode:
             
             # Return the cached model in the appropriate output
             if actual_model_type == "model":
-                return (vram_model, None, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+                return (vram_model, None, None, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
             elif actual_model_type == "clip":
-                return (None, vram_model, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+                return (None, vram_model, None, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
             elif actual_model_type == "vae":
-                return (None, None, vram_model, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+                return (None, None, vram_model, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
             elif actual_model_type == "checkpoint":
-                return (None, None, None, vram_model, None, None, "LOADED_AND_CACHED", actual_model_type)
+                return (None, None, None, vram_model, None, None, None, "LOADED_AND_CACHED", actual_model_type)
             elif actual_model_type == "lora":
-                return (None, None, None, None, vram_model, None, "LOADED_AND_CACHED", actual_model_type)
+                return (None, None, None, None, vram_model, None, None, "LOADED_AND_CACHED", actual_model_type)
             elif actual_model_type == "controlnet":
-                return (None, None, None, None, None, vram_model, "LOADED_AND_CACHED", actual_model_type)
+                return (None, None, None, None, None, vram_model, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "Load Pulid Flux Model":
+                return (None, None, None, None, None, None, vram_model, "LOADED_AND_CACHED", actual_model_type)
             
         except Exception as e:
             logger.error(f"Error caching {actual_model_type} model {model_name}: {str(e)}")
-            return (None, None, None, None, None, None, f"ERROR: {str(e)}", model_type)
+            return (None, None, None, None, None, None, None, f"ERROR: {str(e)}", model_type)
 
 class CachedModelLoaderNode:
     """ComfyUI node for loading cached models by name without original model file"""
@@ -233,8 +241,8 @@ class CachedModelLoaderNode:
             }
         }
     
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "STRING", "STRING")
-    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "cache_status", "model_type")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "PULIDFLUX", "STRING", "STRING")
+    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "pulid_flux", "cache_status", "model_type")
     FUNCTION = "load_cached_model"
     CATEGORY = "VRAM Cache"
     
@@ -244,7 +252,7 @@ class CachedModelLoaderNode:
         
         if not model_name or not model_name.strip():
             logger.error("Model name is required")
-            return (None, None, None, None, None, None, "ERROR: Model name is required", model_type)
+            return (None, None, None, None, None, None, None, "ERROR: Model name is required", model_type)
         
         logger.info(f"Attempting to load cached model by name: {model_name}")
         
@@ -261,23 +269,25 @@ class CachedModelLoaderNode:
             
             # Return the cached model in the appropriate output
             if actual_model_type == "model":
-                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (cached_model, None, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "clip":
-                return (None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "vae":
-                return (None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "checkpoint":
-                return (None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "lora":
-                return (None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
             elif actual_model_type == "controlnet":
-                return (None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
+                return (None, None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "Load Pulid Flux Model":
+                return (None, None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
             else:
                 # Default to model output for unknown types
-                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+                return (cached_model, None, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
         else:
             logger.error(f"Model '{model_name}' not found in VRAM cache")
-            return (None, None, None, None, None, None, f"ERROR: Model '{model_name}' not found in cache", model_type) 
+            return (None, None, None, None, None, None, None, f"ERROR: Model '{model_name}' not found in cache", model_type) 
 
 class ModelCacheCheckerNode:
     """ComfyUI node for checking if a model is cached in VRAM"""
