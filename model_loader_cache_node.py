@@ -307,7 +307,7 @@ class ModelCacheCheckerNode:
             cache_info = cache._cache_info.get(model_name, {})
             model_type = cache_info.get("type", "unknown")
             success_message = f"Model '{model_name}' ({model_type}) is available in VRAM cache"
-            return (success_message, "")
+            return (success_message, "false")
         else:
             logger.info(f"Model '{model_name}' not found in VRAM cache")
             return ("", model_name) 

@@ -139,7 +139,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 3. The CLIP output will contain the cached model, other outputs will be None
 4. No need to provide the original model file again
 
-### 6. 🔍 SNAPS Cache Checker (ModelCacheCheckerNode)
+### 6. 🤖 SNAPS Cache Checker (ModelCacheCheckerNode)
 
 **Node for checking if a model is cached in VRAM**
 
@@ -148,23 +148,23 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 
 **Outputs:**
 - `success_output` (STRING): Success message if model is found in cache (empty if not found)
-- `not_found_output` (STRING): Model name if not found in cache (empty if found)
+- `not_found_output` (STRING): "false" if model is found, model_name if not found
 
 **Usage:**
 - **Check cache status**: Verifies if a model is cached in VRAM
 - **Conditional workflow**: Use outputs to control workflow branches
 - **Success message**: Provides detailed info about cached model (name and type)
-- **Pass-through**: Passes model name to next node if not cached
+- **Boolean-like output**: Returns "false" when found, model_name when not found
 
 **Example Workflow:**
-1. Use **🔍 SNAPS Cache Checker** with model_name "my_model"
-2. If found: `success_output` contains "Model 'my_model' (checkpoint) is available in VRAM cache"
-3. If not found: `not_found_output` contains "my_model" to pass to loading node
+1. Use **🤖 SNAPS Cache Checker** with model_name "my_model"
+2. If found: `success_output` contains "Model 'my_model' (checkpoint) is available in VRAM cache", `not_found_output` contains "false"
+3. If not found: `success_output` is empty, `not_found_output` contains "my_model"
 4. Use outputs to control whether to load from cache or load from file
 
 **Conditional Logic:**
-- **Model found**: `success_output` has message, `not_found_output` is empty
-- **Model not found**: `success_output` is empty, `not_found_output` has model name
+- **Model found**: `success_output` has message, `not_found_output` = "false"
+- **Model not found**: `success_output` is empty, `not_found_output` = model_name
 
 ## How It Works
 
