@@ -14,14 +14,19 @@ class ModelLoaderCacheNode:
         return {
             "required": {
                 "model": ("MODEL",),
+                "clip": ("CLIP",),
+                "vae": ("VAE",),
+                "checkpoint": ("CHECKPOINT",),
+                "lora": ("LORA",),
+                "controlnet": ("CONTROL_NET",),
                 "model_name": ("STRING", {"default": "model", "multiline": False}),
                 "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
                 "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
     
-    RETURN_TYPES = ("MODEL", "STRING", "STRING")
-    RETURN_NAMES = ("model", "cache_status", "model_type")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "STRING", "STRING")
+    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "cache_status", "model_type")
     FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
@@ -113,31 +118,70 @@ class ModelLoaderCacheNode:
             logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
             return model_data
     
-    def load_model(self, model, model_name: str = "model", model_type: str = "auto", force_reload: bool = False):
+    def load_model(self, model=None, clip=None, vae=None, checkpoint=None, lora=None, controlnet=None, model_name: str = "model", model_type: str = "auto", force_reload: bool = False):
         """Load model data and cache it in VRAM by name"""
         cache = VRAMCache()
         
-        if model is None:
+        # Determine which model input is provided
+        model_data = None
+        actual_model_type = model_type
+        
+        if model is not None:
+            model_data = model
+            actual_model_type = "model"
+        elif clip is not None:
+            model_data = clip
+            actual_model_type = "clip"
+        elif vae is not None:
+            model_data = vae
+            actual_model_type = "vae"
+        elif checkpoint is not None:
+            model_data = checkpoint
+            actual_model_type = "checkpoint"
+        elif lora is not None:
+            model_data = lora
+            actual_model_type = "lora"
+        elif controlnet is not None:
+            model_data = controlnet
+            actual_model_type = "controlnet"
+        else:
+            logger.error("No model input provided")
+            return (None, None, None, None, None, None, "ERROR: No model input provided", model_type)
+        
+        if model_data is None:
             logger.error(f"Model data is None for model: {model_name}")
-            return (None, "ERROR: Model data is None", model_type)
+            return (None, None, None, None, None, None, "ERROR: Model data is None", model_type)
         
         # Debug logging to identify model type
-        logger.info(f"Processing {model_type} model: {model_name}")
-        logger.info(f"Model type: {type(model)}")
-        logger.info(f"Model attributes: {[attr for attr in dir(model) if not attr.startswith('_')]}")
+        logger.info(f"Processing {actual_model_type} model: {model_name}")
+        logger.info(f"Model type: {type(model_data)}")
+        logger.info(f"Model attributes: {[attr for attr in dir(model_data) if not attr.startswith('_')]}")
         
         # Check if model is already cached by name
         if not force_reload and model_name in cache._cache:
-            logger.info(f"{model_type} model already cached in VRAM: {model_name}")
+            logger.info(f"{actual_model_type} model already cached in VRAM: {model_name}")
             cached_model = cache._cache[model_name]
-            return (cached_model, "LOADED_FROM_CACHE", model_type)
+            
+            # Return the cached model in the appropriate output
+            if actual_model_type == "model":
+                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "clip":
+                return (None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "vae":
+                return (None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "checkpoint":
+                return (None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "lora":
+                return (None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "controlnet":
+                return (None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
         
         # Cache the model data directly in VRAM by name
         try:
-            logger.info(f"Caching {model_type} model in VRAM: {model_name}")
+            logger.info(f"Caching {actual_model_type} model in VRAM: {model_name}")
             
             # Move model to GPU VRAM
-            vram_model = self.move_model_to_vram(model)
+            vram_model = self.move_model_to_vram(model_data)
             
             # Store the model data directly in cache by name
             cache._cache[model_name] = vram_model
@@ -145,16 +189,29 @@ class ModelLoaderCacheNode:
             # Store cache info by name
             cache._cache_info[model_name] = {
                 "name": model_name,
-                "type": model_type,
+                "type": actual_model_type,
                 "cached_at": str(torch.cuda.memory_allocated() if torch.cuda.is_available() else 0)
             }
             
-            logger.info(f"Successfully cached {model_type} model in VRAM: {model_name}")
-            return (vram_model, "LOADED_AND_CACHED", model_type)
+            logger.info(f"Successfully cached {actual_model_type} model in VRAM: {model_name}")
+            
+            # Return the cached model in the appropriate output
+            if actual_model_type == "model":
+                return (vram_model, None, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "clip":
+                return (None, vram_model, None, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "vae":
+                return (None, None, vram_model, None, None, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "checkpoint":
+                return (None, None, None, vram_model, None, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "lora":
+                return (None, None, None, None, vram_model, None, "LOADED_AND_CACHED", actual_model_type)
+            elif actual_model_type == "controlnet":
+                return (None, None, None, None, None, vram_model, "LOADED_AND_CACHED", actual_model_type)
             
         except Exception as e:
-            logger.error(f"Error caching {model_type} model {model_name}: {str(e)}")
-            return (None, f"ERROR: {str(e)}", model_type) 
+            logger.error(f"Error caching {actual_model_type} model {model_name}: {str(e)}")
+            return (None, None, None, None, None, None, f"ERROR: {str(e)}", model_type)
 
 class CachedModelLoaderNode:
     """ComfyUI node for loading cached models by name without original model file"""
@@ -168,8 +225,8 @@ class CachedModelLoaderNode:
             }
         }
     
-    RETURN_TYPES = ("MODEL", "STRING", "STRING")
-    RETURN_NAMES = ("model", "cache_status", "model_type")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CHECKPOINT", "LORA", "CONTROL_NET", "STRING", "STRING")
+    RETURN_NAMES = ("model", "clip", "vae", "checkpoint", "lora", "controlnet", "cache_status", "model_type")
     FUNCTION = "load_cached_model"
     CATEGORY = "VRAM Cache"
     
@@ -179,7 +236,7 @@ class CachedModelLoaderNode:
         
         if not model_name or not model_name.strip():
             logger.error("Model name is required")
-            return (None, "ERROR: Model name is required", model_type)
+            return (None, None, None, None, None, None, "ERROR: Model name is required", model_type)
         
         logger.info(f"Attempting to load cached model by name: {model_name}")
         
@@ -193,7 +250,60 @@ class CachedModelLoaderNode:
             actual_model_type = cache_info.get("type", model_type)
             
             logger.info(f"Successfully loaded cached {actual_model_type} model: {model_name}")
-            return (cached_model, "LOADED_FROM_CACHE", actual_model_type)
+            
+            # Return the cached model in the appropriate output
+            if actual_model_type == "model":
+                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "clip":
+                return (None, cached_model, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "vae":
+                return (None, None, cached_model, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "checkpoint":
+                return (None, None, None, cached_model, None, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "lora":
+                return (None, None, None, None, cached_model, None, "LOADED_FROM_CACHE", actual_model_type)
+            elif actual_model_type == "controlnet":
+                return (None, None, None, None, None, cached_model, "LOADED_FROM_CACHE", actual_model_type)
+            else:
+                # Default to model output for unknown types
+                return (cached_model, None, None, None, None, None, "LOADED_FROM_CACHE", actual_model_type)
         else:
             logger.error(f"Model '{model_name}' not found in VRAM cache")
-            return (None, f"ERROR: Model '{model_name}' not found in cache", model_type) 
+            return (None, None, None, None, None, None, f"ERROR: Model '{model_name}' not found in cache", model_type) 
+
+class ModelCacheCheckerNode:
+    """ComfyUI node for checking if a model is cached in VRAM"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model_name": ("STRING", {"default": "", "multiline": False}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("success_output", "not_found_output")
+    FUNCTION = "check_model_cache"
+    CATEGORY = "VRAM Cache"
+    
+    def check_model_cache(self, model_name: str):
+        """Check if model is cached in VRAM"""
+        cache = VRAMCache()
+        
+        if not model_name or not model_name.strip():
+            logger.error("Model name is required")
+            return ("", "")
+        
+        logger.info(f"Checking if model is cached in VRAM: {model_name}")
+        
+        # Check if model is cached by name
+        if model_name in cache._cache:
+            logger.info(f"Model '{model_name}' found in VRAM cache")
+            cache_info = cache._cache_info.get(model_name, {})
+            model_type = cache_info.get("type", "unknown")
+            success_message = f"Model '{model_name}' ({model_type}) is available in VRAM cache"
+            return (success_message, "")
+        else:
+            logger.info(f"Model '{model_name}' not found in VRAM cache")
+            return ("", model_name) 
