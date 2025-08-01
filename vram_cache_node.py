@@ -46,22 +46,27 @@ class VRAMCache:
         """Cache model in VRAM"""
         cache_key = self.get_cache_key(model_path)
         
-        # Move model to GPU VRAM if CUDA is available
+        # Ensure model is properly moved to GPU VRAM
         if torch.cuda.is_available():
             try:
                 if isinstance(model_data, dict):
-                    # For state_dict style models
+                    # For state_dict style models, move all tensors to GPU
                     vram_model = {}
                     for key, value in model_data.items():
                         if isinstance(value, torch.Tensor):
-                            vram_model[key] = value.cuda()
+                            # Ensure tensor is on GPU and in VRAM
+                            if value.device.type != 'cuda':
+                                vram_model[key] = value.cuda()
+                            else:
+                                vram_model[key] = value
                         else:
                             vram_model[key] = value
                     logger.info("Moved model state_dict to GPU VRAM")
                     model_data = vram_model
                 elif isinstance(model_data, torch.Tensor):
                     # For single tensor models
-                    model_data = model_data.cuda()
+                    if model_data.device.type != 'cuda':
+                        model_data = model_data.cuda()
                     logger.info("Moved model tensor to GPU VRAM")
             except Exception as e:
                 logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
@@ -139,13 +144,14 @@ class VRAMCacheNode:
                     model_data = torch.load(model_path, map_location='cpu')
                     logger.info(f"Loaded torch model: {model_path}")
                 
-                # Move to GPU VRAM
+                # Move to GPU VRAM properly
                 if torch.cuda.is_available():
                     try:
                         if isinstance(model_data, dict):
                             vram_model = {}
                             for key, value in model_data.items():
                                 if isinstance(value, torch.Tensor):
+                                    # Ensure tensor is moved to GPU VRAM
                                     vram_model[key] = value.cuda()
                                 else:
                                     vram_model[key] = value
@@ -258,3 +264,46 @@ class VRAMCacheControlNode:
             return ("Cache cleared successfully",)
         
         return ("Unknown action",) 
+
+class VRAMStatusNode:
+    """ComfyUI node for checking VRAM status"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {},
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("vram_status",)
+    FUNCTION = "get_vram_status"
+    CATEGORY = "VRAM Cache"
+    
+    def get_vram_status(self):
+        """Get current VRAM status"""
+        if not torch.cuda.is_available():
+            return ("CUDA not available - no GPU detected",)
+        
+        try:
+            allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
+            reserved = torch.cuda.memory_reserved() / (1024**3)    # GB
+            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            
+            cache = VRAMCache()
+            cache_count = len(cache._cache)
+            
+            status_lines = [
+                f"GPU VRAM Status:",
+                f"- Total VRAM: {total:.2f} GB",
+                f"- Allocated: {allocated:.2f} GB",
+                f"- Reserved: {reserved:.2f} GB",
+                f"- Free: {total - reserved:.2f} GB",
+                f"- Cached Models: {cache_count}",
+            ]
+            
+            logger.info(f"VRAM Status - Allocated: {allocated:.2f}GB, Reserved: {reserved:.2f}GB, Cached: {cache_count}")
+            return ("\n".join(status_lines),)
+            
+        except Exception as e:
+            logger.error(f"Error getting VRAM status: {str(e)}")
+            return (f"ERROR: {str(e)}",) 

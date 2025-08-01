@@ -70,6 +70,21 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **list_cache**: Lists all models currently cached in VRAM with their file sizes
 - **clear_cache**: Clears all cached models from VRAM
 
+### 4. 📊 SNAPS VRAM Status (VRAMStatusNode)
+
+**Node for checking GPU VRAM usage and cache status**
+
+**Inputs:**
+- None
+
+**Outputs:**
+- `vram_status` (STRING): Detailed VRAM usage information
+
+**Usage:**
+- **Monitor VRAM**: Check total, allocated, reserved, and free GPU memory
+- **Verify caching**: See how many models are cached
+- **Debug storage**: Confirm models are actually stored in GPU VRAM
+
 ## How It Works
 
 1. **Cache Key Generation**: Each model gets a unique cache key based on file path, modification time, and file size
@@ -107,3 +122,18 @@ Logs will appear in your ComfyUI console output.
 - The cache persists until manually cleared or ComfyUI is restarted
 - No size limits are enforced - cache as many models as your VRAM allows
 - All model types are supported (checkpoints, LoRAs, VAEs, etc.) 
+
+## How to Verify VRAM Storage
+
+1. **Use VRAM Status Node**: Add the "📊 SNAPS VRAM Status" node to your workflow
+2. **Check before/after**: Run it before and after loading models
+3. **Monitor allocated memory**: The "Allocated" value should increase when models are cached
+4. **Check cache count**: The "Cached Models" count should match your loaded models
+
+## VRAM Storage Verification
+
+The nodes now properly move models to GPU VRAM:
+- **State_dict models**: All tensors are moved to GPU using `.cuda()`
+- **Single tensors**: Direct GPU transfer
+- **Device checking**: Verifies tensors are actually on GPU before caching
+- **Memory tracking**: Logs VRAM usage for debugging 

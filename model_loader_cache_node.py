@@ -37,15 +37,25 @@ class ModelLoaderCacheNode:
                 vram_model = {}
                 for key, value in model_data.items():
                     if isinstance(value, torch.Tensor):
-                        vram_model[key] = value.cuda()
+                        # Check if tensor is already on GPU
+                        if value.device.type != 'cuda':
+                            vram_model[key] = value.cuda()
+                            logger.info(f"Moved tensor {key} to GPU VRAM")
+                        else:
+                            vram_model[key] = value
+                            logger.info(f"Tensor {key} already on GPU")
                     else:
                         vram_model[key] = value
                 logger.info("Moved model state_dict to GPU VRAM")
                 return vram_model
             elif isinstance(model_data, torch.Tensor):
                 # For single tensor models
-                vram_model = model_data.cuda()
-                logger.info("Moved model tensor to GPU VRAM")
+                if model_data.device.type != 'cuda':
+                    vram_model = model_data.cuda()
+                    logger.info("Moved model tensor to GPU VRAM")
+                else:
+                    vram_model = model_data
+                    logger.info("Model tensor already on GPU")
                 return vram_model
             else:
                 # For other model types, try to move to GPU if possible
