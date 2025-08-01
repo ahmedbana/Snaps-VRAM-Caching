@@ -1,139 +1,172 @@
 import torch
 import hashlib
 import os
+import logging
+from typing import Dict, Any, Optional
 import json
-from typing import Dict, Any, Optional, Union
 
-# Import compatibility layer
-try:
-    import folder_paths
-except ImportError:
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from compat import folder_paths
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from vram_cache_manager import cache_manager
+class VRAMCache:
+    """Singleton class to manage VRAM cache for models"""
+    _instance = None
+    _cache: Dict[str, Any] = {}
+    _cache_info: Dict[str, Dict] = {}
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(VRAMCache, cls).__new__(cls)
+        return cls._instance
+    
+    def get_cache_key(self, model_path: str) -> str:
+        """Generate a unique cache key for the model file"""
+        # Use file path and modification time for cache key
+        if os.path.exists(model_path):
+            stat = os.stat(model_path)
+            key_data = f"{model_path}_{stat.st_mtime}_{stat.st_size}"
+            return hashlib.md5(key_data.encode()).hexdigest()
+        return hashlib.md5(model_path.encode()).hexdigest()
+    
+    def is_cached(self, model_path: str) -> bool:
+        """Check if model is already cached in VRAM"""
+        cache_key = self.get_cache_key(model_path)
+        return cache_key in self._cache
+    
+    def get_cached_model(self, model_path: str) -> Optional[Any]:
+        """Get cached model from VRAM"""
+        cache_key = self.get_cache_key(model_path)
+        if cache_key in self._cache:
+            logger.info(f"Retrieved model from VRAM cache: {model_path}")
+            return self._cache[cache_key]
+        return None
+    
+    def cache_model(self, model_path: str, model_data: Any) -> str:
+        """Cache model in VRAM"""
+        cache_key = self.get_cache_key(model_path)
+        self._cache[cache_key] = model_data
+        
+        # Store cache info
+        self._cache_info[cache_key] = {
+            "path": model_path,
+            "size": os.path.getsize(model_path) if os.path.exists(model_path) else 0,
+            "cached_at": str(torch.cuda.memory_allocated() if torch.cuda.is_available() else 0)
+        }
+        
+        logger.info(f"Cached model in VRAM: {model_path} (key: {cache_key})")
+        return cache_key
+    
+    def get_cache_info(self) -> Dict[str, Dict]:
+        """Get information about all cached models"""
+        return self._cache_info
+    
+    def clear_cache(self):
+        """Clear all cached models from VRAM"""
+        self._cache.clear()
+        self._cache_info.clear()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info("Cleared all models from VRAM cache")
 
 class VRAMCacheNode:
-    def __init__(self):
-        self.cache_manager = cache_manager
+    """ComfyUI node for loading and caching models in VRAM"""
     
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "load_path": ("STRING", {"default": "", "multiline": False}),
-                "cache_enabled": ("BOOLEAN", {"default": True}),
-                "clear_cache": ("BOOLEAN", {"default": False}),
-                "unlimited_cache": ("BOOLEAN", {"default": False}),
-                "max_cache_size_gb": ("FLOAT", {"default": 8.0, "min": 0.1, "max": 32.0, "step": 0.1}),
-            },
-            "optional": {
-                "model_data": ("MODEL",),
+                "model_path": ("STRING", {"default": "", "multiline": False}),
+                "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
     
-    RETURN_TYPES = ("MODEL", "STRING", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("model", "cache_status", "was_cached", "cache_stats")
-    FUNCTION = "process_model"
+    RETURN_TYPES = ("MODEL", "STRING", "STRING")
+    RETURN_NAMES = ("model", "cache_status", "cache_key")
+    FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
-    def process_model(self, load_path: str, cache_enabled: bool, clear_cache: bool, unlimited_cache: bool, max_cache_size_gb: float, model_data: Optional[Any] = None):
-        """Main processing function for the VRAM cache node"""
+    def load_model(self, model_path: str, force_reload: bool = False):
+        """Load model and cache it in VRAM"""
+        cache = VRAMCache()
         
-        # Handle unlimited cache setting
-        if unlimited_cache:
-            self.cache_manager.set_unlimited_cache(True)
-        else:
-            self.cache_manager.set_max_cache_size(max_cache_size_gb)
+        if not model_path or not os.path.exists(model_path):
+            logger.error(f"Model path does not exist: {model_path}")
+            return (None, "ERROR: Model path does not exist", "")
         
-        # Handle cache clearing
-        if clear_cache:
-            self.cache_manager.clear_cache()
-            return (None, "Cache cleared", False, "Cache cleared")
+        logger.info(f"Processing model: {model_path}")
         
-        # If no load path provided, return the input model data
-        if not load_path:
-            stats = self.cache_manager.get_cache_stats()
-            if stats.get('unlimited_cache', False):
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-            else:
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-            return (model_data, "No load path provided", False, stats_str)
+        # Check if model is already cached
+        if not force_reload and cache.is_cached(model_path):
+            logger.info(f"Model already cached in VRAM: {model_path}")
+            cached_model = cache.get_cached_model(model_path)
+            cache_key = cache.get_cache_key(model_path)
+            return (cached_model, "LOADED_FROM_CACHE", cache_key)
         
-        # Get the actual model path from the load path
-        model_path = self._get_model_path_from_load_path(load_path)
-        
-        # Check if model exists
-        if not os.path.exists(model_path):
-            stats = self.cache_manager.get_cache_stats()
-            if stats.get('unlimited_cache', False):
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-            else:
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-            return (model_data, f"Model not found: {model_path}", False, stats_str)
-        
-        was_cached = False
-        
-        if cache_enabled:
-            # Try to load from VRAM cache first
-            cached_model = self.cache_manager.access_model(model_path)
-            if cached_model is not None:
-                was_cached = True
-                cache_status = f"Loaded from VRAM cache: {os.path.basename(model_path)}"
-            else:
-                # Load model normally and cache it
-                if model_data is not None:
-                    self.cache_manager.cache_model(model_path, model_data)
-                    cache_status = f"Cached in VRAM: {os.path.basename(model_path)}"
-                else:
-                    cache_status = f"Model loaded but not cached (no model_data): {os.path.basename(model_path)}"
-        else:
-            cache_status = f"Cache disabled, loaded normally: {os.path.basename(model_path)}"
-        
-        # Get cache statistics
-        stats = self.cache_manager.get_cache_stats()
-        if stats.get('unlimited_cache', False):
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-        else:
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-        
-        return (model_data, cache_status, was_cached, stats_str)
-    
-    def _get_model_path_from_load_path(self, load_path: str) -> str:
-        """Extract the actual model path from the load path input"""
-        # Handle different load path formats
-        if load_path.startswith('"') and load_path.endswith('"'):
-            # Remove quotes if present
-            load_path = load_path[1:-1]
-        
-        # If it's already a full path, return it
-        if os.path.isabs(load_path):
-            return load_path
-        
-        # Try to get the full path using ComfyUI's folder_paths
+        # Load model into VRAM
         try:
-            # Check if it's a checkpoint
-            if load_path.endswith(('.safetensors', '.ckpt', '.pt')):
-                return folder_paths.get_full_path("checkpoints", load_path)
-            # Check if it's a VAE
-            elif 'vae' in load_path.lower():
-                return folder_paths.get_full_path("vae", load_path)
-            # Check if it's a LoRA
-            elif 'lora' in load_path.lower():
-                return folder_paths.get_full_path("loras", load_path)
-            # Default to checkpoints
+            logger.info(f"Loading model into VRAM: {model_path}")
+            
+            # Try to load the model using torch
+            if model_path.endswith('.safetensors'):
+                from safetensors.torch import load_file
+                model_data = load_file(model_path)
+                logger.info(f"Loaded safetensors model: {model_path}")
             else:
-                return folder_paths.get_full_path("checkpoints", load_path)
-        except:
-            # If folder_paths fails, try to construct the path
-            return os.path.join(folder_paths.get_folder_paths("checkpoints")[0], load_path)
+                model_data = torch.load(model_path, map_location='cpu')
+                logger.info(f"Loaded torch model: {model_path}")
+            
+            # Cache the model
+            cache_key = cache.cache_model(model_path, model_data)
+            
+            logger.info(f"Successfully cached model in VRAM: {model_path}")
+            return (model_data, "LOADED_AND_CACHED", cache_key)
+            
+        except Exception as e:
+            logger.error(f"Error loading model {model_path}: {str(e)}")
+            return (None, f"ERROR: {str(e)}", "")
+
+class VRAMCacheControlNode:
+    """ComfyUI node for controlling VRAM cache"""
     
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        """Return a hash to determine if the node should be re-executed"""
-        return hash(str(kwargs)) 
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "action": (["list_cache", "clear_cache"], {"default": "list_cache"}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("cache_info",)
+    FUNCTION = "control_cache"
+    CATEGORY = "VRAM Cache"
+    
+    def control_cache(self, action: str):
+        """Control VRAM cache operations"""
+        cache = VRAMCache()
+        
+        if action == "list_cache":
+            cache_info = cache.get_cache_info()
+            if not cache_info:
+                return ("No models cached in VRAM",)
+            
+            info_lines = ["Cached Models in VRAM:"]
+            for key, info in cache_info.items():
+                if "path" in info:
+                    # File-based cache (from VRAMCacheNode)
+                    size_mb = info.get("size", 0) / (1024 * 1024)
+                    info_lines.append(f"- {info.get('path', 'Unknown')} ({size_mb:.2f} MB)")
+                else:
+                    # Model data cache (from ModelLoaderCacheNode)
+                    model_type = info.get("type", "unknown")
+                    info_lines.append(f"- {info.get('name', 'Unknown')} ({model_type})")
+            
+            logger.info("Listed cached models")
+            return ("\n".join(info_lines),)
+        
+        elif action == "clear_cache":
+            cache.clear_cache()
+            return ("Cache cleared successfully",)
+        
+        return ("Unknown action",) 

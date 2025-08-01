@@ -1,200 +1,85 @@
 import torch
 import os
-import json
-from typing import Dict, Any, Optional, Union
+import logging
+import hashlib
+from typing import Dict, Any, Optional
+from .vram_cache_node import VRAMCache
 
-# Import compatibility layer
-try:
-    import folder_paths
-except ImportError:
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from compat import folder_paths
-
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from vram_cache_manager import cache_manager
+logger = logging.getLogger(__name__)
 
 class ModelLoaderCacheNode:
-    """Node that integrates with ComfyUI's model loading system for VRAM caching"""
-    
-    def __init__(self):
-        self.cache_manager = cache_manager
+    """ComfyUI node for loading specific types of models and caching them in VRAM"""
     
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model_name": (folder_paths.get_filename_list("checkpoints"), ),
-                "cache_enabled": ("BOOLEAN", {"default": True}),
-                "clear_cache": ("BOOLEAN", {"default": False}),
-                "unlimited_cache": ("BOOLEAN", {"default": False}),
-                "max_cache_size_gb": ("FLOAT", {"default": 8.0, "min": 0.1, "max": 32.0, "step": 0.1}),
+                "model": ("MODEL",),
+                "model_name": ("STRING", {"default": "model", "multiline": False}),
+                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip"], {"default": "auto"}),
                 "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
     
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "STRING", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("model", "clip", "vae", "cache_status", "was_cached", "cache_stats")
+    RETURN_TYPES = ("MODEL", "STRING", "STRING")
+    RETURN_NAMES = ("model", "cache_status", "model_type")
     FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
-    def load_model(self, model_name: str, cache_enabled: bool, clear_cache: bool, unlimited_cache: bool, max_cache_size_gb: float, force_reload: bool):
-        """Load a model with VRAM caching support"""
-        
-        # Handle unlimited cache setting
-        if unlimited_cache:
-            self.cache_manager.set_unlimited_cache(True)
-        else:
-            self.cache_manager.set_max_cache_size(max_cache_size_gb)
-        
-        # Handle cache clearing
-        if clear_cache:
-            self.cache_manager.clear_cache()
-            return (None, None, None, "Cache cleared", False, "Cache cleared")
-        
-        # Get the full model path
-        model_path = folder_paths.get_full_path("checkpoints", model_name)
-        
-        if not os.path.exists(model_path):
-            stats = self.cache_manager.get_cache_stats()
-            if stats.get('unlimited_cache', False):
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-            else:
-                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-            return (None, None, None, f"Model not found: {model_name}", False, stats_str)
-        
-        was_cached = False
-        
-        if cache_enabled and not force_reload:
-            # Try to load from VRAM cache first
-            cached_model = self.cache_manager.access_model(model_path)
-            if cached_model is not None:
-                was_cached = True
-                cache_status = f"Loaded from VRAM cache: {model_name}"
-                
-                # Return cached model components
-                model, clip, vae = self._extract_model_components(cached_model)
-            else:
-                # Load model normally and cache it
-                model, clip, vae = self._load_model_components(model_path)
-                if model is not None:
-                    # Cache the entire model state
-                    model_state = {
-                        'model': model,
-                        'clip': clip,
-                        'vae': vae,
-                        'path': model_path
-                    }
-                    self.cache_manager.cache_model(model_path, model_state)
-                    cache_status = f"Cached in VRAM: {model_name}"
-                else:
-                    cache_status = f"Failed to load model: {model_name}"
-        else:
-            # Load model normally (cache disabled or force reload)
-            model, clip, vae = self._load_model_components(model_path)
-            if model is not None and cache_enabled:
-                # Cache the model even if force reload was used
-                model_state = {
-                    'model': model,
-                    'clip': clip,
-                    'vae': vae,
-                    'path': model_path
-                }
-                self.cache_manager.cache_model(model_path, model_state)
-                cache_status = f"Loaded and cached: {model_name}"
-            else:
-                cache_status = f"Loaded normally: {model_name}"
-        
-        # Get cache statistics
-        stats = self.cache_manager.get_cache_stats()
-        if stats.get('unlimited_cache', False):
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-        else:
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-        
-        return (model, clip, vae, cache_status, was_cached, stats_str)
-    
-    def _load_model_components(self, model_path: str) -> tuple:
-        """Load model components using ComfyUI's model loading system"""
+    def get_cache_key(self, model_name: str, model_data: Any) -> str:
+        """Generate a unique cache key for the model data"""
+        # Create a hash based on model name and data structure
         try:
-            # This is a simplified version - in practice, you'd use ComfyUI's actual model loading
-            # For now, we'll return None to indicate that the model needs to be loaded normally
-            return (None, None, None)
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            return (None, None, None)
+            # Try to create a hash from the model data
+            if hasattr(model_data, 'keys'):
+                # For dict-like objects (like state_dict)
+                data_str = str(sorted(model_data.keys()))
+            else:
+                # For other objects, use string representation
+                data_str = str(model_data)
+            
+            key_data = f"{model_name}_{data_str}"
+            return hashlib.md5(key_data.encode()).hexdigest()
+        except:
+            # Fallback to just the model name
+            return hashlib.md5(model_name.encode()).hexdigest()
     
-    def _extract_model_components(self, cached_model: Dict[str, Any]) -> tuple:
-        """Extract model components from cached model state"""
-        if isinstance(cached_model, dict):
-            return (
-                cached_model.get('model'),
-                cached_model.get('clip'),
-                cached_model.get('vae')
-            )
-        return (None, None, None)
-    
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        """Return a hash to determine if the node should be re-executed"""
-        return hash(str(kwargs))
-
-class VRAMCacheControlNode:
-    """Control node for managing VRAM cache settings"""
-    
-    def __init__(self):
-        self.cache_manager = cache_manager
-    
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "action": (["get_stats", "clear_cache", "set_size", "set_unlimited"], ),
-                "unlimited_cache": ("BOOLEAN", {"default": False}),
-                "max_cache_size_gb": ("FLOAT", {"default": 8.0, "min": 0.1, "max": 32.0, "step": 0.1}),
+    def load_model(self, model, model_name: str = "model", model_type: str = "auto", force_reload: bool = False):
+        """Load model data and cache it in VRAM"""
+        cache = VRAMCache()
+        
+        if model is None:
+            logger.error(f"Model data is None for model: {model_name}")
+            return (None, "ERROR: Model data is None", model_type)
+        
+        logger.info(f"Processing {model_type} model: {model_name}")
+        
+        # Generate cache key for this model data
+        cache_key = self.get_cache_key(model_name, model)
+        
+        # Check if model is already cached
+        if not force_reload and cache_key in cache._cache:
+            logger.info(f"{model_type} model already cached in VRAM: {model_name}")
+            cached_model = cache._cache[cache_key]
+            return (cached_model, "LOADED_FROM_CACHE", model_type)
+        
+        # Cache the model data directly
+        try:
+            logger.info(f"Caching {model_type} model in VRAM: {model_name}")
+            
+            # Store the model data directly in cache
+            cache._cache[cache_key] = model
+            
+            # Store cache info
+            cache._cache_info[cache_key] = {
+                "name": model_name,
+                "type": model_type,
+                "cached_at": str(torch.cuda.memory_allocated() if torch.cuda.is_available() else 0)
             }
-        }
-    
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("action_result", "cache_stats")
-    FUNCTION = "control_cache"
-    CATEGORY = "VRAM Cache"
-    
-    def control_cache(self, action: str, unlimited_cache: bool, max_cache_size_gb: float):
-        """Control VRAM cache operations"""
-        
-        if action == "clear_cache":
-            self.cache_manager.clear_cache()
-            result = "Cache cleared successfully"
-        elif action == "set_size":
-            if unlimited_cache:
-                self.cache_manager.set_unlimited_cache(True)
-                result = "Cache size set to unlimited"
-            else:
-                self.cache_manager.set_max_cache_size(max_cache_size_gb)
-                result = f"Cache size set to {max_cache_size_gb} GB"
-        elif action == "set_unlimited":
-            self.cache_manager.set_unlimited_cache(unlimited_cache)
-            if unlimited_cache:
-                result = "Cache size set to unlimited"
-            else:
-                result = f"Cache size set to {max_cache_size_gb} GB"
-        else:  # get_stats
-            result = "Cache statistics retrieved"
-        
-        # Get current cache statistics
-        stats = self.cache_manager.get_cache_stats()
-        if stats.get('unlimited_cache', False):
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
-        else:
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
-        
-        return (result, stats_str)
-    
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        """Return a hash to determine if the node should be re-executed"""
-        return hash(str(kwargs)) 
+            
+            logger.info(f"Successfully cached {model_type} model in VRAM: {model_name} (key: {cache_key})")
+            return (model, "LOADED_AND_CACHED", model_type)
+            
+        except Exception as e:
+            logger.error(f"Error caching {model_type} model {model_name}: {str(e)}")
+            return (None, f"ERROR: {str(e)}", model_type) 

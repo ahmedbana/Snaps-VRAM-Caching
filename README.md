@@ -1,175 +1,105 @@
-# ComfyUI VRAM Cache Custom Nodes
+# SNAPS VRAM Cache for ComfyUI
 
-This custom node package provides VRAM caching functionality for ComfyUI, allowing models to be cached in GPU memory for faster subsequent loads.
+A simple VRAM cache system for ComfyUI that allows you to cache models and files directly in GPU VRAM for faster loading and reuse.
 
 ## Features
 
-- **VRAM Caching**: Cache models in GPU memory to avoid repeated disk loading
-- **LRU Eviction**: Automatically evict least recently used models when cache is full
-- **Unlimited Cache**: Option to disable cache size limits for maximum performance
-- **Smart Path Detection**: Automatically detects model paths from ComfyUI load paths
-- **Cache Statistics**: Monitor cache usage and performance
-- **Configurable Cache Size**: Set maximum cache size in GB or unlimited
-- **Cache Control**: Clear cache and manage settings through UI nodes
-
-## Installation
-
-1. Clone or download this repository to your ComfyUI `custom_nodes` directory:
-   ```
-   cd ComfyUI/custom_nodes
-   git clone https://github.com/ahmedbana/Snaps-VRAM-Caching.git
-   ```
-
-2. Restart ComfyUI to load the custom nodes
+- **No size limits**: Cache models of any size in VRAM
+- **Multiple model types**: Supports checkpoints, LoRAs, VAEs, ControlNets, and CLIP models
+- **Automatic detection**: Automatically detects model types based on file paths
+- **Debug logging**: Comprehensive logging for debugging and monitoring
+- **Cache management**: List and clear cached models
 
 ## Nodes
 
-### 1. 🤖 SNAPS VRAM Cache Node
-A general-purpose caching node that can cache any model data with smart path detection.
+### 1. 🤖 SNAPS VRAM Cache (VRAMCacheNode)
+
+**Main node for loading and caching models in VRAM**
 
 **Inputs:**
-- `load_path` (STRING): Model load path (supports ComfyUI path formats)
-- `cache_enabled` (BOOLEAN): Enable/disable caching (default: True)
-- `clear_cache` (BOOLEAN): Clear all cached models (default: False)
-- `unlimited_cache` (BOOLEAN): Enable unlimited cache size (default: False)
-- `max_cache_size_gb` (FLOAT): Maximum cache size in GB (default: 8.0)
-- `model_data` (MODEL, optional): Model data to cache
+- `model_path` (STRING): Path to the model file
+- `force_reload` (BOOLEAN): Force reload even if already cached (default: False)
 
 **Outputs:**
-- `model` (MODEL): The model data
-- `cache_status` (STRING): Status message about caching
-- `was_cached` (BOOLEAN): Whether the model was loaded from cache
-- `cache_stats` (STRING): Current cache statistics
+- `model`: The loaded model data
+- `cache_status`: Status message ("LOADED_FROM_CACHE", "LOADED_AND_CACHED", or error)
+- `cache_key`: Unique cache key for the model
 
-**Smart Path Detection:**
-The node automatically detects model paths from various ComfyUI load path formats:
-- Full file paths: `/path/to/model.safetensors`
-- ComfyUI relative paths: `model.safetensors`
-- Quoted paths: `"model.safetensors"`
-- Supports checkpoints, VAE, and LoRA files
+**Usage:**
+- Connect a model path to load and cache the model
+- The node will check if the model is already cached in VRAM
+- If cached, it returns the cached model instantly
+- If not cached, it loads the model and stores it in VRAM for future use
 
-### 2. 🤖 SNAPS Model Loader Cache Node
-A specialized node that integrates with ComfyUI's model loading system.
+### 2. 🤖 SNAPS Model Loader (ModelLoaderCacheNode)
+
+**Specialized node for caching model data directly in VRAM**
 
 **Inputs:**
-- `model_name` (CHECKPOINT): Model name from ComfyUI's checkpoint list
-- `cache_enabled` (BOOLEAN): Enable/disable caching (default: True)
-- `clear_cache` (BOOLEAN): Clear all cached models (default: False)
-- `unlimited_cache` (BOOLEAN): Enable unlimited cache size (default: False)
-- `max_cache_size_gb` (FLOAT): Maximum cache size in GB (default: 8.0)
-- `force_reload` (BOOLEAN): Force reload from disk (default: False)
+- `model` (MODEL): The model data to cache
+- `model_name` (STRING): Name/identifier for the model (default: "model")
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip")
+- `force_reload` (BOOLEAN): Force reload even if already cached (default: False)
 
 **Outputs:**
-- `model` (MODEL): The loaded model
-- `clip` (CLIP): The CLIP model
-- `vae` (VAE): The VAE model
-- `cache_status` (STRING): Status message about caching
-- `was_cached` (BOOLEAN): Whether the model was loaded from cache
-- `cache_stats` (STRING): Current cache statistics
+- `model`: The model data (same as input)
+- `cache_status`: Status message
+- `model_type`: The detected/selected model type
 
-### 3. 🤖 SNAPS VRAM Cache Control Node
-A control node for managing cache settings and operations.
+**Usage:**
+- Takes model data as input (not file path)
+- Caches the model data directly in VRAM
+- If the same model data is already cached, returns it instantly
+- Useful for caching models that are already loaded in your workflow
+
+### 3. 📋 SNAPS Cache Control (VRAMCacheControlNode)
+
+**Node for managing the VRAM cache**
 
 **Inputs:**
-- `action` (SELECT): Action to perform (get_stats, clear_cache, set_size, set_unlimited)
-- `unlimited_cache` (BOOLEAN): Enable unlimited cache size (default: False)
-- `max_cache_size_gb` (FLOAT): Maximum cache size in GB (default: 8.0)
+- `action` (SELECT): Action to perform ("list_cache", "clear_cache")
 
 **Outputs:**
-- `action_result` (STRING): Result of the performed action
-- `cache_stats` (STRING): Current cache statistics
+- `cache_info` (STRING): Information about cached models or status message
 
-## Usage Examples
+**Usage:**
+- **list_cache**: Lists all models currently cached in VRAM with their file sizes
+- **clear_cache**: Clears all cached models from VRAM
 
-### Basic Caching with Smart Path Detection
-1. Add a "🤖 SNAPS VRAM Cache" node to your workflow
-2. Connect your model loader to the `model_data` input
-3. Set the `load_path` to your model path (supports various formats)
-4. Enable caching by setting `cache_enabled` to True
-5. Optionally enable `unlimited_cache` for maximum performance
-6. The node will cache the model on first load and load from cache on subsequent runs
+## How It Works
 
-### Unlimited Cache Mode
-For maximum performance, enable unlimited cache:
-1. Set `unlimited_cache` to True
-2. The cache will store all models without size limits
-3. No LRU eviction will occur
-4. Perfect for high-end GPUs with large VRAM
+1. **Cache Key Generation**: Each model gets a unique cache key based on file path, modification time, and file size
+2. **VRAM Storage**: Models are stored directly in GPU VRAM using PyTorch tensors
+3. **Singleton Pattern**: Uses a singleton cache manager to ensure consistent state across nodes
+4. **Automatic Detection**: Supports both `.safetensors` and regular PyTorch model files
+5. **Comprehensive Logging**: All operations are logged for debugging
 
-### Model Loader Integration
-1. Add a "🤖 SNAPS Model Loader Cache" node to your workflow
-2. Select your model from the `model_name` dropdown
-3. Enable caching and set your desired cache size or unlimited mode
-4. Connect the outputs to your workflow as needed
+## Logging
 
-### Cache Management
-1. Add a "🤖 SNAPS VRAM Cache Control" node to your workflow
-2. Use the `action` dropdown to:
-   - `get_stats`: View current cache statistics
-   - `clear_cache`: Clear all cached models
-   - `set_size`: Set the maximum cache size
-   - `set_unlimited`: Enable/disable unlimited cache mode
+The nodes provide detailed logging for debugging:
+- Model loading operations
+- Cache hits and misses
+- Error messages
+- Cache management operations
 
-## Cache Behavior
+Logs will appear in your ComfyUI console output.
 
-- **First Load**: Model is loaded from disk and cached in VRAM
-- **Subsequent Loads**: Model is loaded directly from VRAM cache
-- **Limited Cache**: Least recently used models are automatically evicted when cache is full
-- **Unlimited Cache**: All models are cached without size limits
-- **Cache Statistics**: Monitor usage with the cache_stats output
+## Installation
 
-## Configuration
+1. Place this folder in your ComfyUI `custom_nodes` directory
+2. Restart ComfyUI
+3. The nodes will appear in the "VRAM Cache" category
 
-The cache uses a JSON file to persist cache metadata between ComfyUI sessions. The cache index is stored in:
-```
-ComfyUI/temp/vram_cache/cache_index.json
-```
+## Example Workflow
 
-## Performance Benefits
+1. Use **SNAPS VRAM Cache** to load your first model - it will be cached in VRAM
+2. Use the same node again with the same model path - it will load instantly from cache
+3. Use **SNAPS Cache Control** with "list_cache" to see all cached models
+4. Use **SNAPS Cache Control** with "clear_cache" to free VRAM when done
 
-- **Faster Model Loading**: Cached models load instantly from VRAM
-- **Reduced Disk I/O**: Avoid repeated disk reads for the same models
-- **Memory Management**: Automatic eviction prevents VRAM overflow (in limited mode)
-- **Unlimited Performance**: No size limits for maximum speed (in unlimited mode)
-- **Session Persistence**: Cache metadata persists between ComfyUI restarts
+## Notes
 
-## Limitations
-
-- Models must be identical (same file) to use cache
-- Cache is cleared when ComfyUI is restarted
-- Large models may consume significant VRAM
-- Unlimited cache mode requires sufficient GPU memory
-
-## Troubleshooting
-
-### Cache Not Working
-1. Check that `cache_enabled` is set to True
-2. Verify the load path is correct
-3. Ensure you have sufficient VRAM available
-4. Check the cache_status output for error messages
-
-### Memory Issues
-1. Reduce the `max_cache_size_gb` setting
-2. Disable `unlimited_cache` if enabled
-3. Use the "🤖 SNAPS VRAM Cache Control" node to clear cache
-4. Restart ComfyUI to clear all cached models
-
-### Performance Issues
-1. Monitor cache statistics to ensure models are being cached
-2. Check that models are being loaded from cache (was_cached = True)
-3. Consider enabling unlimited cache for maximum performance
-4. Adjust cache size based on your GPU memory
-
-## Technical Details
-
-The cache system uses:
-- **MD5 Hashing**: For model file identification
-- **LRU Eviction**: For memory management (in limited mode)
-- **JSON Metadata**: For cache persistence
-- **Torch CUDA Events**: For GPU synchronization
-- **Smart Path Detection**: For automatic model path resolution
-- **Unlimited Mode**: For maximum performance without size limits
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
+- Models are cached in GPU VRAM, so they consume GPU memory
+- The cache persists until manually cleared or ComfyUI is restarted
+- No size limits are enforced - cache as many models as your VRAM allows
+- All model types are supported (checkpoints, LoRAs, VAEs, etc.) 
