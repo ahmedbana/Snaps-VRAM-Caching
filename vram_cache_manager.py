@@ -34,6 +34,7 @@ class VRAMCacheManager:
         self.cache_index_file = os.path.join(self.cache_dir, "cache_index.json")
         self.cached_models = OrderedDict()  # Use OrderedDict for LRU behavior
         self.max_cache_size = 8 * 1024 * 1024 * 1024  # 8GB default
+        self.unlimited_cache = False  # New flag for unlimited cache
         self.current_cache_size = 0
         self.load_cache_index()
         self._initialized = True
@@ -46,20 +47,26 @@ class VRAMCacheManager:
                     data = json.load(f)
                     self.cached_models = OrderedDict(data.get('models', {}))
                     self.current_cache_size = data.get('current_size', 0)
+                    self.unlimited_cache = data.get('unlimited_cache', False)
+                    if not self.unlimited_cache:
+                        self.max_cache_size = data.get('max_size', 8 * 1024 * 1024 * 1024)
             except:
                 self.cached_models = OrderedDict()
                 self.current_cache_size = 0
+                self.unlimited_cache = False
         else:
             os.makedirs(self.cache_dir, exist_ok=True)
             self.cached_models = OrderedDict()
             self.current_cache_size = 0
+            self.unlimited_cache = False
     
     def save_cache_index(self):
         """Save the cache index to disk"""
         data = {
             'models': dict(self.cached_models),
             'current_size': self.current_cache_size,
-            'max_size': self.max_cache_size,
+            'max_size': self.max_cache_size if not self.unlimited_cache else None,
+            'unlimited_cache': self.unlimited_cache,
             'last_updated': time.time()
         }
         with open(self.cache_index_file, 'w') as f:
@@ -97,9 +104,10 @@ class VRAMCacheManager:
         model_hash = self.get_model_hash(model_path)
         model_size = self.get_model_size(model_data)
         
-        # Check if we need to evict models to make space
-        while self.current_cache_size + model_size > self.max_cache_size and self.cached_models:
-            self._evict_oldest_model()
+        # Check if we need to evict models to make space (only if not unlimited)
+        if not self.unlimited_cache:
+            while self.current_cache_size + model_size > self.max_cache_size and self.cached_models:
+                self._evict_oldest_model()
         
         # Store model in VRAM cache
         self.cached_models[model_hash] = {
@@ -113,7 +121,12 @@ class VRAMCacheManager:
         
         self.current_cache_size += model_size
         self.save_cache_index()
-        print(f"Cached model in VRAM: {model_path} ({model_size / (1024*1024):.2f} MB)")
+        
+        size_mb = model_size / (1024*1024)
+        if self.unlimited_cache:
+            print(f"Cached model in VRAM (unlimited): {model_path} ({size_mb:.2f} MB)")
+        else:
+            print(f"Cached model in VRAM: {model_path} ({size_mb:.2f} MB)")
         return model_hash
     
     def _evict_oldest_model(self):
@@ -158,18 +171,46 @@ class VRAMCacheManager:
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the cache"""
-        return {
-            'total_models': len(self.cached_models),
-            'current_size_mb': self.current_cache_size / (1024 * 1024),
-            'max_size_mb': self.max_cache_size / (1024 * 1024),
-            'cache_usage_percent': (self.current_cache_size / self.max_cache_size) * 100 if self.max_cache_size > 0 else 0
-        }
+        if self.unlimited_cache:
+            return {
+                'total_models': len(self.cached_models),
+                'current_size_mb': self.current_cache_size / (1024 * 1024),
+                'max_size_mb': float('inf'),
+                'cache_usage_percent': 0.0,
+                'unlimited_cache': True
+            }
+        else:
+            return {
+                'total_models': len(self.cached_models),
+                'current_size_mb': self.current_cache_size / (1024 * 1024),
+                'max_size_mb': self.max_cache_size / (1024 * 1024),
+                'cache_usage_percent': (self.current_cache_size / self.max_cache_size) * 100 if self.max_cache_size > 0 else 0,
+                'unlimited_cache': False
+            }
     
     def set_max_cache_size(self, size_gb: float):
         """Set the maximum cache size in GB"""
-        self.max_cache_size = int(size_gb * 1024 * 1024 * 1024)
+        if size_gb <= 0:
+            self.unlimited_cache = True
+            self.max_cache_size = float('inf')
+            print("Cache size set to unlimited")
+        else:
+            self.unlimited_cache = False
+            self.max_cache_size = int(size_gb * 1024 * 1024 * 1024)
+            print(f"Max cache size set to {size_gb} GB")
         self.save_cache_index()
-        print(f"Max cache size set to {size_gb} GB")
+    
+    def set_unlimited_cache(self, unlimited: bool):
+        """Set unlimited cache mode"""
+        self.unlimited_cache = unlimited
+        if unlimited:
+            self.max_cache_size = float('inf')
+            print("Cache size set to unlimited")
+        else:
+            # Reset to default 8GB if switching from unlimited
+            self.max_cache_size = 8 * 1024 * 1024 * 1024
+            print("Cache size reset to 8 GB")
+        self.save_cache_index()
 
 # Global instance
 cache_manager = VRAMCacheManager() 

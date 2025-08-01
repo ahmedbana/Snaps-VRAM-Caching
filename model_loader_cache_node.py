@@ -30,6 +30,7 @@ class ModelLoaderCacheNode:
                 "model_name": (folder_paths.get_filename_list("checkpoints"), ),
                 "cache_enabled": ("BOOLEAN", {"default": True}),
                 "clear_cache": ("BOOLEAN", {"default": False}),
+                "unlimited_cache": ("BOOLEAN", {"default": False}),
                 "max_cache_size_gb": ("FLOAT", {"default": 8.0, "min": 0.1, "max": 32.0, "step": 0.1}),
                 "force_reload": ("BOOLEAN", {"default": False}),
             }
@@ -40,11 +41,14 @@ class ModelLoaderCacheNode:
     FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
-    def load_model(self, model_name: str, cache_enabled: bool, clear_cache: bool, max_cache_size_gb: float, force_reload: bool):
+    def load_model(self, model_name: str, cache_enabled: bool, clear_cache: bool, unlimited_cache: bool, max_cache_size_gb: float, force_reload: bool):
         """Load a model with VRAM caching support"""
         
-        # Update cache size limit
-        self.cache_manager.set_max_cache_size(max_cache_size_gb)
+        # Handle unlimited cache setting
+        if unlimited_cache:
+            self.cache_manager.set_unlimited_cache(True)
+        else:
+            self.cache_manager.set_max_cache_size(max_cache_size_gb)
         
         # Handle cache clearing
         if clear_cache:
@@ -56,7 +60,10 @@ class ModelLoaderCacheNode:
         
         if not os.path.exists(model_path):
             stats = self.cache_manager.get_cache_stats()
-            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
+            if stats.get('unlimited_cache', False):
+                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
+            else:
+                stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
             return (None, None, None, f"Model not found: {model_name}", False, stats_str)
         
         was_cached = False
@@ -103,7 +110,10 @@ class ModelLoaderCacheNode:
         
         # Get cache statistics
         stats = self.cache_manager.get_cache_stats()
-        stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
+        if stats.get('unlimited_cache', False):
+            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
+        else:
+            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
         
         return (model, clip, vae, cache_status, was_cached, stats_str)
     
@@ -142,7 +152,8 @@ class VRAMCacheControlNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "action": (["get_stats", "clear_cache", "set_size"], ),
+                "action": (["get_stats", "clear_cache", "set_size", "set_unlimited"], ),
+                "unlimited_cache": ("BOOLEAN", {"default": False}),
                 "max_cache_size_gb": ("FLOAT", {"default": 8.0, "min": 0.1, "max": 32.0, "step": 0.1}),
             }
         }
@@ -152,21 +163,34 @@ class VRAMCacheControlNode:
     FUNCTION = "control_cache"
     CATEGORY = "VRAM Cache"
     
-    def control_cache(self, action: str, max_cache_size_gb: float):
+    def control_cache(self, action: str, unlimited_cache: bool, max_cache_size_gb: float):
         """Control VRAM cache operations"""
         
         if action == "clear_cache":
             self.cache_manager.clear_cache()
             result = "Cache cleared successfully"
         elif action == "set_size":
-            self.cache_manager.set_max_cache_size(max_cache_size_gb)
-            result = f"Cache size set to {max_cache_size_gb} GB"
+            if unlimited_cache:
+                self.cache_manager.set_unlimited_cache(True)
+                result = "Cache size set to unlimited"
+            else:
+                self.cache_manager.set_max_cache_size(max_cache_size_gb)
+                result = f"Cache size set to {max_cache_size_gb} GB"
+        elif action == "set_unlimited":
+            self.cache_manager.set_unlimited_cache(unlimited_cache)
+            if unlimited_cache:
+                result = "Cache size set to unlimited"
+            else:
+                result = f"Cache size set to {max_cache_size_gb} GB"
         else:  # get_stats
             result = "Cache statistics retrieved"
         
         # Get current cache statistics
         stats = self.cache_manager.get_cache_stats()
-        stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
+        if stats.get('unlimited_cache', False):
+            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB (Unlimited)"
+        else:
+            stats_str = f"Models: {stats['total_models']}, Size: {stats['current_size_mb']:.1f}MB/{stats['max_size_mb']:.1f}MB ({stats['cache_usage_percent']:.1f}%)"
         
         return (result, stats_str)
     
