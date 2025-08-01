@@ -68,6 +68,18 @@ class VRAMCache:
                     if model_data.device.type != 'cuda':
                         model_data = model_data.cuda()
                     logger.info("Moved model tensor to GPU VRAM")
+                elif hasattr(model_data, 'cuda'):
+                    # For model objects with cuda method (like FLUX models)
+                    logger.info("Detected model object with cuda method, moving to GPU")
+                    model_data = model_data.cuda()
+                    logger.info("Moved model object to GPU VRAM")
+                elif hasattr(model_data, 'to'):
+                    # For model objects with .to() method
+                    logger.info("Detected model object with .to() method, moving to GPU")
+                    model_data = model_data.cuda()
+                    logger.info("Moved model object to GPU VRAM")
+                else:
+                    logger.warning(f"Model object type {type(model_data)} cannot be moved to GPU")
             except Exception as e:
                 logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
         
@@ -160,6 +172,18 @@ class VRAMCacheNode:
                         elif isinstance(model_data, torch.Tensor):
                             model_data = model_data.cuda()
                             logger.info("Moved model tensor to GPU VRAM")
+                        elif hasattr(model_data, 'cuda'):
+                            # For model objects with cuda method (like FLUX models)
+                            logger.info("Detected model object with cuda method, moving to GPU")
+                            model_data = model_data.cuda()
+                            logger.info("Moved model object to GPU VRAM")
+                        elif hasattr(model_data, 'to'):
+                            # For model objects with .to() method
+                            logger.info("Detected model object with .to() method, moving to GPU")
+                            model_data = model_data.cuda()
+                            logger.info("Moved model object to GPU VRAM")
+                        else:
+                            logger.warning(f"Model object type {type(model_data)} cannot be moved to GPU")
                     except Exception as e:
                         logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
                 

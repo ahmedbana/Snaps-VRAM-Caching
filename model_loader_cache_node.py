@@ -32,6 +32,7 @@ class ModelLoaderCacheNode:
             return model_data
         
         try:
+            # Handle different model data types
             if isinstance(model_data, dict):
                 # For state_dict style models
                 vram_model = {}
@@ -57,10 +58,39 @@ class ModelLoaderCacheNode:
                     vram_model = model_data
                     logger.info("Model tensor already on GPU")
                 return vram_model
-            else:
-                # For other model types, try to move to GPU if possible
-                logger.info("Model data type not directly movable to GPU, keeping as-is")
+            elif hasattr(model_data, 'state_dict'):
+                # For model objects with state_dict method (like FLUX models)
+                logger.info("Detected model object with state_dict, moving to GPU")
+                model_data = model_data.cuda()
+                logger.info("Moved model object to GPU VRAM")
                 return model_data
+            elif hasattr(model_data, 'to'):
+                # For model objects with .to() method
+                logger.info("Detected model object with .to() method, moving to GPU")
+                model_data = model_data.cuda()
+                logger.info("Moved model object to GPU VRAM")
+                return model_data
+            elif hasattr(model_data, 'parameters'):
+                # For model objects with parameters
+                logger.info("Detected model object with parameters, moving to GPU")
+                model_data = model_data.cuda()
+                logger.info("Moved model object to GPU VRAM")
+                return model_data
+            else:
+                # Try to inspect the object and move any tensors found
+                logger.info("Attempting to move unknown model type to GPU")
+                try:
+                    # Try to move the entire object to GPU
+                    if hasattr(model_data, 'cuda'):
+                        vram_model = model_data.cuda()
+                        logger.info("Successfully moved model object to GPU VRAM")
+                        return vram_model
+                    else:
+                        logger.warning(f"Model object type {type(model_data)} has no cuda method")
+                        return model_data
+                except Exception as e:
+                    logger.warning(f"Could not move model object to GPU: {str(e)}")
+                    return model_data
         except Exception as e:
             logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
             return model_data
@@ -73,7 +103,10 @@ class ModelLoaderCacheNode:
             logger.error(f"Model data is None for model: {model_name}")
             return (None, "ERROR: Model data is None", model_type)
         
+        # Debug logging to identify model type
         logger.info(f"Processing {model_type} model: {model_name}")
+        logger.info(f"Model type: {type(model)}")
+        logger.info(f"Model attributes: {[attr for attr in dir(model) if not attr.startswith('_')]}")
         
         # Check if model is already cached by name
         if not force_reload and model_name in cache._cache:
