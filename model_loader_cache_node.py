@@ -308,15 +308,15 @@ class ModelCacheCheckerNode:
             cache_info = cache._cache_info.get(model_name, {})
             model_type = cache_info.get("type", "unknown")
             success_message = f"Model '{model_name}' ({model_type}) is available in VRAM cache"
-            # Add unique identifier to force output refresh
-            not_found_output = "false"
+            
+            # Use hash only when model is found in cache
             if force_reload:
                 not_found_output = f"false_{hash(model_name)}_{hash(str(cache._cache.keys()))}"
+            else:
+                not_found_output = "false"
+            
             return (success_message, not_found_output)
         else:
             logger.info(f"Model '{model_name}' not found in VRAM cache")
-            # Add unique identifier to force output refresh
-            not_found_output = model_name
-            if force_reload:
-                not_found_output = f"{model_name}_{hash(model_name)}_{hash(str(cache._cache.keys()))}"
-            return ("", not_found_output) 
+            # Always return clean model name when not found (no hash)
+            return ("", model_name) 
