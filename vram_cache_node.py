@@ -78,6 +78,17 @@ class VRAMCache:
                     logger.info("Detected model object with .to() method, moving to GPU")
                     model_data = model_data.cuda()
                     logger.info("Moved model object to GPU VRAM")
+                elif hasattr(model_data, 'model') and hasattr(model_data.model, 'cuda'):
+                    # For ComfyUI ModelPatcher objects
+                    logger.info("Detected ComfyUI ModelPatcher, moving underlying model to GPU")
+                    model_data.model = model_data.model.cuda()
+                    logger.info("Moved ModelPatcher underlying model to GPU VRAM")
+                elif hasattr(model_data, 'model'):
+                    # For objects with model attribute
+                    logger.info("Detected object with model attribute, attempting to move model to GPU")
+                    if hasattr(model_data.model, 'cuda'):
+                        model_data.model = model_data.model.cuda()
+                        logger.info("Moved model attribute to GPU VRAM")
                 else:
                     logger.warning(f"Model object type {type(model_data)} cannot be moved to GPU")
             except Exception as e:
@@ -182,6 +193,17 @@ class VRAMCacheNode:
                             logger.info("Detected model object with .to() method, moving to GPU")
                             model_data = model_data.cuda()
                             logger.info("Moved model object to GPU VRAM")
+                        elif hasattr(model_data, 'model') and hasattr(model_data.model, 'cuda'):
+                            # For ComfyUI ModelPatcher objects
+                            logger.info("Detected ComfyUI ModelPatcher, moving underlying model to GPU")
+                            model_data.model = model_data.model.cuda()
+                            logger.info("Moved ModelPatcher underlying model to GPU VRAM")
+                        elif hasattr(model_data, 'model'):
+                            # For objects with model attribute
+                            logger.info("Detected object with model attribute, attempting to move model to GPU")
+                            if hasattr(model_data.model, 'cuda'):
+                                model_data.model = model_data.model.cuda()
+                                logger.info("Moved model attribute to GPU VRAM")
                         else:
                             logger.warning(f"Model object type {type(model_data)} cannot be moved to GPU")
                     except Exception as e:

@@ -76,6 +76,19 @@ class ModelLoaderCacheNode:
                 model_data = model_data.cuda()
                 logger.info("Moved model object to GPU VRAM")
                 return model_data
+            elif hasattr(model_data, 'model') and hasattr(model_data.model, 'cuda'):
+                # For ComfyUI ModelPatcher objects
+                logger.info("Detected ComfyUI ModelPatcher, moving underlying model to GPU")
+                model_data.model = model_data.model.cuda()
+                logger.info("Moved ModelPatcher underlying model to GPU VRAM")
+                return model_data
+            elif hasattr(model_data, 'model'):
+                # For objects with model attribute
+                logger.info("Detected object with model attribute, attempting to move model to GPU")
+                if hasattr(model_data.model, 'cuda'):
+                    model_data.model = model_data.model.cuda()
+                    logger.info("Moved model attribute to GPU VRAM")
+                return model_data
             else:
                 # Try to inspect the object and move any tensors found
                 logger.info("Attempting to move unknown model type to GPU")
@@ -87,6 +100,11 @@ class ModelLoaderCacheNode:
                         return vram_model
                     else:
                         logger.warning(f"Model object type {type(model_data)} has no cuda method")
+                        # For ComfyUI objects, try to move to GPU using their internal methods
+                        if hasattr(model_data, 'to'):
+                            vram_model = model_data.to('cuda')
+                            logger.info("Moved model object to GPU using .to() method")
+                            return vram_model
                         return model_data
                 except Exception as e:
                     logger.warning(f"Could not move model object to GPU: {str(e)}")
