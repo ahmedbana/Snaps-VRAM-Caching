@@ -14,7 +14,7 @@ class ModelLoaderCacheNode:
         return {
             "required": {
                 "model_name": ("STRING", {"default": "model", "multiline": False}),
-                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
+                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion", "Load Pulid Flux Model"], {"default": "auto"}),
                 "force_reload": ("BOOLEAN", {"default": False}),
             },
             "optional": {
@@ -150,6 +150,10 @@ class ModelLoaderCacheNode:
             logger.error("No model input provided")
             return (None, None, None, None, None, None, "ERROR: No model input provided", model_type)
         
+        # Handle special model types
+        if model_type == "Load Pulid Flux Model":
+            actual_model_type = "Load Pulid Flux Model"
+        
         if model_data is None:
             logger.error(f"Model data is None for model: {model_name}")
             return (None, None, None, None, None, None, "ERROR: Model data is None", model_type)
@@ -225,7 +229,7 @@ class CachedModelLoaderNode:
                 "model_name": ("STRING", {"default": "", "multiline": False}),
             },
             "optional": {
-                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion"], {"default": "auto"}),
+                "model_type": (["auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion", "Load Pulid Flux Model"], {"default": "auto"}),
             }
         }
     

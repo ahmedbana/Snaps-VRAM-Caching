@@ -40,7 +40,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 
 **Required Inputs:**
 - `model_name` (STRING): Name/identifier for the model (required for caching)
-- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion")
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion", "Load Pulid Flux Model")
 - `force_reload` (BOOLEAN): Force reload even if already cached (default: False)
 
 **Optional Inputs (one is sufficient):**
@@ -113,7 +113,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - `model_name` (STRING): Name of the cached model to load
 
 **Optional Inputs:**
-- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion") - auto-detected if not provided
+- `model_type` (SELECT): Type of model ("auto", "checkpoint", "lora", "vae", "controlnet", "clip", "diffusion", "Load Pulid Flux Model") - auto-detected if not provided
 
 **Outputs:**
 - `model` (MODEL): The cached model data (if cached as model type)
