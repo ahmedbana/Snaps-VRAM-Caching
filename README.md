@@ -145,6 +145,7 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 
 **Inputs:**
 - `model_name` (STRING): Name of the model to check in cache
+- `force_reload` (BOOLEAN): Force refresh output to avoid ComfyUI caching (default: False)
 
 **Outputs:**
 - `success_output` (STRING): Success message if model is found in cache (empty if not found)
@@ -155,12 +156,14 @@ A simple VRAM cache system for ComfyUI that allows you to cache models and files
 - **Conditional workflow**: Use outputs to control workflow branches
 - **Success message**: Provides detailed info about cached model (name and type)
 - **Boolean-like output**: Returns "false" when found, model_name when not found
+- **Force refresh**: Use force_reload=True to avoid ComfyUI output caching issues
 
 **Example Workflow:**
 1. Use **🤖 SNAPS Cache Checker** with model_name "my_model"
 2. If found: `success_output` contains "Model 'my_model' (checkpoint) is available in VRAM cache", `not_found_output` contains "false"
 3. If not found: `success_output` is empty, `not_found_output` contains "my_model"
 4. Use outputs to control whether to load from cache or load from file
+5. Use `force_reload=True` if ComfyUI is caching the output
 
 **Conditional Logic:**
 - **Model found**: `success_output` has message, `not_found_output` = "false"

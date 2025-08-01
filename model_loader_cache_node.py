@@ -283,6 +283,7 @@ class ModelCacheCheckerNode:
         return {
             "required": {
                 "model_name": ("STRING", {"default": "", "multiline": False}),
+                "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
     
@@ -291,7 +292,7 @@ class ModelCacheCheckerNode:
     FUNCTION = "check_model_cache"
     CATEGORY = "VRAM Cache"
     
-    def check_model_cache(self, model_name: str):
+    def check_model_cache(self, model_name: str, force_reload: bool = False):
         """Check if model is cached in VRAM"""
         cache = VRAMCache()
         
@@ -299,7 +300,7 @@ class ModelCacheCheckerNode:
             logger.error("Model name is required")
             return ("", "")
         
-        logger.info(f"Checking if model is cached in VRAM: {model_name}")
+        logger.info(f"Checking if model is cached in VRAM: {model_name} (force_reload: {force_reload})")
         
         # Check if model is cached by name
         if model_name in cache._cache:
@@ -307,7 +308,15 @@ class ModelCacheCheckerNode:
             cache_info = cache._cache_info.get(model_name, {})
             model_type = cache_info.get("type", "unknown")
             success_message = f"Model '{model_name}' ({model_type}) is available in VRAM cache"
-            return (success_message, "false")
+            # Add unique identifier to force output refresh
+            not_found_output = "false"
+            if force_reload:
+                not_found_output = f"false_{hash(model_name)}_{hash(str(cache._cache.keys()))}"
+            return (success_message, not_found_output)
         else:
             logger.info(f"Model '{model_name}' not found in VRAM cache")
-            return ("", model_name) 
+            # Add unique identifier to force output refresh
+            not_found_output = model_name
+            if force_reload:
+                not_found_output = f"{model_name}_{hash(model_name)}_{hash(str(cache._cache.keys()))}"
+            return ("", not_found_output) 
