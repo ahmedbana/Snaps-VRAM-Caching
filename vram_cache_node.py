@@ -45,6 +45,27 @@ class VRAMCache:
     def cache_model(self, model_path: str, model_data: Any) -> str:
         """Cache model in VRAM"""
         cache_key = self.get_cache_key(model_path)
+        
+        # Move model to GPU VRAM if CUDA is available
+        if torch.cuda.is_available():
+            try:
+                if isinstance(model_data, dict):
+                    # For state_dict style models
+                    vram_model = {}
+                    for key, value in model_data.items():
+                        if isinstance(value, torch.Tensor):
+                            vram_model[key] = value.cuda()
+                        else:
+                            vram_model[key] = value
+                    logger.info("Moved model state_dict to GPU VRAM")
+                    model_data = vram_model
+                elif isinstance(model_data, torch.Tensor):
+                    # For single tensor models
+                    model_data = model_data.cuda()
+                    logger.info("Moved model tensor to GPU VRAM")
+            except Exception as e:
+                logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
+        
         self._cache[cache_key] = model_data
         
         # Store cache info
@@ -77,6 +98,7 @@ class VRAMCacheNode:
         return {
             "required": {
                 "model_path": ("STRING", {"default": "", "multiline": False}),
+                "model_name": ("STRING", {"default": "", "multiline": False}),
                 "force_reload": ("BOOLEAN", {"default": False}),
             }
         }
@@ -86,10 +108,72 @@ class VRAMCacheNode:
     FUNCTION = "load_model"
     CATEGORY = "VRAM Cache"
     
-    def load_model(self, model_path: str, force_reload: bool = False):
+    def load_model(self, model_path: str, model_name: str = "", force_reload: bool = False):
         """Load model and cache it in VRAM"""
         cache = VRAMCache()
         
+        # If model_name is provided, use name-based caching
+        if model_name and model_name.strip():
+            logger.info(f"Using name-based caching for: {model_name}")
+            
+            if not model_path or not os.path.exists(model_path):
+                logger.error(f"Model path does not exist: {model_path}")
+                return (None, "ERROR: Model path does not exist", "")
+            
+            # Check if model is already cached by name
+            if not force_reload and model_name in cache._cache:
+                logger.info(f"Model already cached in VRAM by name: {model_name}")
+                cached_model = cache._cache[model_name]
+                return (cached_model, "LOADED_FROM_CACHE", model_name)
+            
+            # Load model into VRAM
+            try:
+                logger.info(f"Loading model into VRAM by name: {model_name}")
+                
+                # Try to load the model using torch
+                if model_path.endswith('.safetensors'):
+                    from safetensors.torch import load_file
+                    model_data = load_file(model_path)
+                    logger.info(f"Loaded safetensors model: {model_path}")
+                else:
+                    model_data = torch.load(model_path, map_location='cpu')
+                    logger.info(f"Loaded torch model: {model_path}")
+                
+                # Move to GPU VRAM
+                if torch.cuda.is_available():
+                    try:
+                        if isinstance(model_data, dict):
+                            vram_model = {}
+                            for key, value in model_data.items():
+                                if isinstance(value, torch.Tensor):
+                                    vram_model[key] = value.cuda()
+                                else:
+                                    vram_model[key] = value
+                            logger.info("Moved model state_dict to GPU VRAM")
+                            model_data = vram_model
+                        elif isinstance(model_data, torch.Tensor):
+                            model_data = model_data.cuda()
+                            logger.info("Moved model tensor to GPU VRAM")
+                    except Exception as e:
+                        logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
+                
+                # Cache the model by name
+                cache._cache[model_name] = model_data
+                cache._cache_info[model_name] = {
+                    "name": model_name,
+                    "path": model_path,
+                    "size": os.path.getsize(model_path) if os.path.exists(model_path) else 0,
+                    "cached_at": str(torch.cuda.memory_allocated() if torch.cuda.is_available() else 0)
+                }
+                
+                logger.info(f"Successfully cached model in VRAM by name: {model_name}")
+                return (model_data, "LOADED_AND_CACHED", model_name)
+                
+            except Exception as e:
+                logger.error(f"Error loading model {model_path}: {str(e)}")
+                return (None, f"ERROR: {str(e)}", "")
+        
+        # Fallback to path-based caching
         if not model_path or not os.path.exists(model_path):
             logger.error(f"Model path does not exist: {model_path}")
             return (None, "ERROR: Model path does not exist", "")
@@ -154,13 +238,17 @@ class VRAMCacheControlNode:
             info_lines = ["Cached Models in VRAM:"]
             for key, info in cache_info.items():
                 if "path" in info:
-                    # File-based cache (from VRAMCacheNode)
+                    # File-based cache (from VRAMCacheNode path-based caching)
                     size_mb = info.get("size", 0) / (1024 * 1024)
                     info_lines.append(f"- {info.get('path', 'Unknown')} ({size_mb:.2f} MB)")
-                else:
-                    # Model data cache (from ModelLoaderCacheNode)
+                elif "name" in info:
+                    # Name-based cache (from ModelLoaderCacheNode or VRAMCacheNode name-based caching)
                     model_type = info.get("type", "unknown")
-                    info_lines.append(f"- {info.get('name', 'Unknown')} ({model_type})")
+                    if "path" in info:
+                        size_mb = info.get("size", 0) / (1024 * 1024)
+                        info_lines.append(f"- {info.get('name', 'Unknown')} ({model_type}) - {info.get('path', 'Unknown')} ({size_mb:.2f} MB)")
+                    else:
+                        info_lines.append(f"- {info.get('name', 'Unknown')} ({model_type})")
             
             logger.info("Listed cached models")
             return ("\n".join(info_lines),)
