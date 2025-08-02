@@ -121,7 +121,7 @@ class ModelLoaderCacheNode:
             logger.warning(f"Could not move model to GPU VRAM: {str(e)}")
             return model_data
     
-    def load_model(self, model=None, clip=None, vae=None, checkpoint=None, lora=None, controlnet=None, model_name: str = "model", model_type: str = "auto", force_reload: bool = False):
+    def load_model(self, model=None, clip=None, vae=None, checkpoint=None, lora=None, controlnet=None, pulid_flux=None, model_name: str = "model", model_type: str = "auto", force_reload: bool = False):
         """Load model data and cache it in VRAM by name"""
         cache = VRAMCache()
         
